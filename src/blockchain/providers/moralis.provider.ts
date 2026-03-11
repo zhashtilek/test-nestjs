@@ -1,38 +1,15 @@
 import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import Moralis from 'nest-moralis';
 
 /**
  * Moralis — unified multi-chain API for tokens, NFTs, prices, and more.
- * Works for both EVM chains and Solana. Requires a free API key.
+ * Uses the REST API directly (Moralis.start() blocks the Node.js event loop).
  *
  * Get a free API key: https://admin.moralis.io
- * Docs: https://docs.moralis.io
- *
- * EVM chain IDs for API calls:
- *   Ethereum → '0x1'    BNB Chain → '0x38'    Polygon → '0x89'
- *
- * Usage examples (in WalletService):
- *
- *   // EVM — ERC-20 token balances
- *   const response = await Moralis.EvmApi.token.getWalletTokenBalances({
- *     address,
- *     chain: this.moralis.evmChainId,
- *   })
- *   response.result // array of token balance objects
- *
- *   // EVM — NFTs owned by wallet
- *   const nfts = await Moralis.EvmApi.nft.getWalletNFTs({
- *     address,
- *     chain: this.moralis.evmChainId,
- *   })
- *
- *   // Solana — SPL token balances
- *   const tokens = await Moralis.SolApi.account.getSPLs({ address, network: 'mainnet' })
- *
- *   // Solana — NFTs
- *   const nfts = await Moralis.SolApi.account.getNFTs({ address, network: 'mainnet' })
+ * Docs: https://docs.moralis.com
  */
+
+const BASE_URL = 'https://deep-index.moralis.io/api/v2.2';
 
 const EVM_CHAIN_IDS: Record<string, string> = {
   ethereum: '0x1',
@@ -44,24 +21,20 @@ const EVM_CHAIN_IDS: Record<string, string> = {
 export class MoralisProvider implements OnModuleInit {
   private readonly logger = new Logger(MoralisProvider.name);
 
-  /** EVM chain ID string for the active network (e.g. '0x1') */
-  evmChainId: string;
-
-  /** Re-exported Moralis module for use in services */
-  readonly sdk = Moralis;
+  chainId: string;
+  apiKey: string;
+  baseUrl = BASE_URL;
 
   private initialized = false;
 
   constructor(private readonly configService: ConfigService) {}
 
   async onModuleInit() {
-    const apiKey = this.configService.get<string>('MORALIS_API_KEY', '');
     const network = this.configService.get<string>('NETWORK', 'ethereum');
+    this.apiKey = this.configService.get<string>('MORALIS_API_KEY', '');
+    this.chainId = EVM_CHAIN_IDS[network] || '';
 
-    this.evmChainId = EVM_CHAIN_IDS[network] || '';
-
-    await Moralis.start({ apiKey });
-    if (!apiKey) {
+    if (!this.apiKey) {
       this.logger.warn(
         'Moralis Provider: MORALIS_API_KEY is not set — token/NFT endpoints will not work. ' +
         'Get a free key at https://admin.moralis.io',
@@ -75,5 +48,9 @@ export class MoralisProvider implements OnModuleInit {
 
   isAvailable(): boolean {
     return this.initialized;
+  }
+
+  get headers(): Record<string, string> {
+    return { 'X-API-Key': this.apiKey };
   }
 }
